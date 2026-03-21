@@ -35,11 +35,11 @@ export function Header() {
     <header className="border-b-2 border-black flex-shrink-0 bg-background z-50">
       <div className="w-full px-4 py-3 flex items-center justify-between relative min-h-[72px]">
         <div className="flex items-center gap-4 absolute left-4 top-1/2 -translate-y-1/2 z-10">
-          <Link href="/">
+          <Link href="/product">
             <Boxes className="w-12 h-12 cursor-pointer" />
           </Link>
         </div>
-        <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 z-0 flex items-center gap-3">
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 z-0 flex items-center gap-3">
           {navItems.map((item) => {
             const isActive = pathname === item.path;
             // Use inactiveIcon if defined and not active, otherwise use icon
@@ -50,7 +50,7 @@ export function Header() {
                 <Button
                   variant="outline"
                   className={cn(
-                    "h-11 transition-all duration-300 border-2 border-black overflow-hidden flex items-center",
+                    "h-11 transition-all duration-300 border-2 border-black overflow-hidden flex items-center justify-center gap-0",
                     isActive 
                       ? "bg-secondary px-5" 
                       : "bg-background hover:bg-accent hover:scale-105 hover:border-black active:scale-95 px-3"
