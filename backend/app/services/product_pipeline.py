@@ -32,8 +32,8 @@ class ProductPipelineService:
     """Runs the create/edit pipeline for the single in-memory product session."""
 
     def __init__(self) -> None:
-        self._default_image_count = 3
-        self._thinking_level = settings.GEMINI_THINKING_LEVEL
+        self._default_image_count = 1
+        # Model selection delegated to GeminiImageService based on workflow
 
     async def run_create(self, prompt: str, image_count: Optional[int] = None) -> None:
         """Execute the create pipeline end-to-end."""
@@ -70,17 +70,18 @@ class ProductPipelineService:
             reference_images = state.images if mode == "edit" else None
             images = await gemini_image_service.generate_product_images(
                 prompt=instruction,
+                workflow=mode,  # "create" or "edit" - determines model selection
                 image_count=state.image_count or self._default_image_count,
                 reference_images=reference_images,
-                thinking_level=self._thinking_level,
             )
             if not images:
                 raise RuntimeError("Gemini image pipeline returned no images")
             state.images = images
             save_product_state(state)
             
-            # Save Gemini images to artifacts for inspection
-            self._save_gemini_images(images, mode)
+            # Save Gemini images to artifacts for inspection (test mode only)
+            if settings.SAVE_ARTIFACTS_LOCALLY:
+                self._save_gemini_images(images, mode)
 
             state.mark_progress("generating_model", "Generating 3D model with Trellis")
             save_product_state(state)
@@ -102,8 +103,9 @@ class ProductPipelineService:
             state.mark_complete("3D asset generated")
             save_product_state(state)
             
-            # Save Trellis GLB model to artifacts
-            self._save_trellis_model(artifacts, mode)
+            # Save Trellis GLB model to artifacts (test mode only)
+            if settings.SAVE_ARTIFACTS_LOCALLY:
+                self._save_trellis_model(artifacts, mode)
 
             preview = self._determine_preview_image(state)
             self._update_status(
@@ -156,7 +158,11 @@ class ProductPipelineService:
         save_product_status(payload)
 
     def _save_gemini_images(self, images: List[str], mode: str) -> None:
-        """Save Gemini-generated images to artifacts for inspection."""
+        """Save Gemini-generated images to filesystem for test inspection.
+        
+        Note: In normal operation, images are already stored in Redis as base64
+        data URLs in ProductState.images. This method is for debugging only.
+        """
         try:
             run_dir = ARTIFACTS_DIR / f"gemini_{mode}_{int(time.time())}"
             run_dir.mkdir(parents=True, exist_ok=True)
@@ -180,7 +186,11 @@ class ProductPipelineService:
             logger.warning(f"[product-pipeline] Failed to create artifacts dir: {exc}")
 
     def _save_trellis_model(self, artifacts: TrellisArtifacts, mode: str) -> None:
-        """Download and save Trellis GLB model to artifacts."""
+        """Download and save Trellis artifacts to filesystem for test inspection.
+        
+        Note: In normal operation, Trellis URLs are already stored in Redis via
+        ProductState.trellis_output. This method downloads and saves for debugging.
+        """
         try:
             if not artifacts.model_file:
                 logger.warning("[product-pipeline] No model_file to save")
@@ -196,14 +206,6 @@ class ProductPipelineService:
             with urllib.request.urlopen(artifacts.model_file) as response:
                 glb_path.write_bytes(response.read())
             logger.info("[product-pipeline] ✓ Saved GLB model to %s (%.1f KB)", glb_path, glb_path.stat().st_size / 1024)
-            
-            # Download color video if available
-            if artifacts.color_video:
-                video_path = run_dir / "color.mp4"
-                logger.info(f"[product-pipeline] Downloading color video...")
-                with urllib.request.urlopen(artifacts.color_video) as response:
-                    video_path.write_bytes(response.read())
-                logger.info(f"[product-pipeline] ✓ Saved color video to {video_path}")
                 
         except Exception as exc:
             logger.warning(f"[product-pipeline] Failed to save Trellis artifacts: {exc}")
