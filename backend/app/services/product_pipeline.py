@@ -7,7 +7,13 @@ import time
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 
-from app.integrations.trellis import trellis_service
+# Make trellis optional - only needed for product generation
+try:
+    from app.integrations.trellis import trellis_service
+    TRELLIS_AVAILABLE = True
+except ImportError:
+    trellis_service = None
+    TRELLIS_AVAILABLE = False
 from app.integrations.gemini import gemini_image_service
 from app.models.product_state import (
     ProductIteration,
@@ -55,6 +61,7 @@ class ProductPipelineService:
         await self._execute_flow(state, instruction, mode="edit")
 
     async def _execute_flow(self, state: ProductState, instruction: str, mode: str) -> None:
+        flow_started_at = time.perf_counter()
         try:
             state.in_progress = True
             state.mark_progress("generating_images", "Generating concept images")
@@ -95,8 +102,13 @@ class ProductPipelineService:
 
             trellis_output = await self._generate_trellis_model(images)
             artifacts = TrellisArtifacts.model_validate(trellis_output)
+            duration_seconds = round(time.perf_counter() - flow_started_at, 2)
             iteration = ProductIteration(
-                type=mode, prompt=instruction, images=images, trellis_output=artifacts
+                type=mode,
+                prompt=instruction,
+                images=images,
+                trellis_output=artifacts,
+                duration_seconds=duration_seconds,
             )
             state.trellis_output = artifacts
             state.iterations.append(iteration)
@@ -133,9 +145,23 @@ class ProductPipelineService:
 
     async def _generate_trellis_model(self, images: List[str]) -> Dict[str, Any]:
         """Call Trellis via the existing integration in a background thread."""
+        if not TRELLIS_AVAILABLE or not trellis_service:
+            raise RuntimeError("Trellis service is not available. Please install fal_client dependency.")
+        
+        def progress_callback(status: str, progress: int, message: str):
+            """Update ProductStatus with Trellis progress in real-time."""
+            self._update_status(
+                ProductStatus(
+                    status=status,
+                    progress=progress,
+                    message=message
+                )
+            )
+        
         return await asyncio.to_thread(
             trellis_service.generate_3d_asset,
             images=images,
+            progress_callback=progress_callback,
         )
 
     def _determine_preview_image(self, state: ProductState) -> Optional[str]:

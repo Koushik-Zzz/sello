@@ -1,36 +1,40 @@
 "use client"
 
-import { useRef, useMemo } from "react"
+import { useRef, useMemo, useEffect } from "react"
 import { Canvas, useFrame } from "@react-three/fiber"
-import { OrbitControls, PerspectiveCamera, Environment, Gltf } from "@react-three/drei"
+import { OrbitControls, PerspectiveCamera, Environment } from "@react-three/drei"
 import * as THREE from "three"
-import type { PackageType, PackageDimensions } from "@/lib/packaging-types"
+import type { PackageModel, PanelId } from "@/lib/packaging-types"
 import { MiniDielineHud } from "@/components/mini-dieline-hud"
-import type { DielinePath } from "@/lib/packaging-types"
 
 interface PackageViewer3DProps {
-  packageType: PackageType
-  dimensions: PackageDimensions
+  model: PackageModel
+  selectedPanelId?: PanelId | null
+  onPanelSelect?: (panelId: PanelId | null) => void
   color?: string
-  dielines?: DielinePath[]
-  modelUrl?: string | null
+  panelTextures?: Record<PanelId, string>
 }
 
-function Package3D({ packageType, dimensions, color = "#93c5fd", modelUrl }: PackageViewer3DProps) {
+function BoxPackage3D({
+  dimensions,
+  selectedPanelId,
+  onPanelSelect,
+  color = "#93c5fd",
+  panelTextures = {},
+}: {
+  dimensions: { width: number; height: number; depth: number }
+  selectedPanelId?: PanelId | null
+  onPanelSelect?: (panelId: PanelId | null) => void
+  color?: string
+  panelTextures?: Record<PanelId, string>
+}) {
   const meshRef = useRef<THREE.Mesh>(null)
   const { width, height, depth } = dimensions
 
-  // Use a fixed scale factor to convert mm to Three.js units
-  // This ensures each dimension is independent and doesn't affect others
   const fixedScale = 0.01 // 1mm = 0.01 Three.js units
   const w = width * fixedScale
   const h = height * fixedScale
   const d = depth * fixedScale
-  
-  // Use a fixed reference dimension for view scaling to prevent visual changes
-  // when individual dimensions change. This keeps the view stable.
-  const fixedReferenceDimension = 200 // mm
-  const viewScale = 2 / (fixedReferenceDimension * fixedScale)
 
   useFrame((state) => {
     if (meshRef.current) {
@@ -38,84 +42,362 @@ function Package3D({ packageType, dimensions, color = "#93c5fd", modelUrl }: Pac
     }
   })
 
-  if (modelUrl) {
-    return (
-      <group ref={meshRef as any}>
-        <Gltf src={modelUrl} scale={viewScale * 2} />
-      </group>
+  // Create base materials array - will be updated by useEffect
+  const materials = useMemo(() => {
+    return Array.from({ length: 6 }, () => 
+      new THREE.MeshStandardMaterial({
+        color: color,
+        roughness: 0.3,
+        metalness: 0.1,
+      })
     )
-  }
+  }, [color])
 
-  const renderPackage = () => {
-    switch (packageType) {
-      case "box":
-        return (
-          <mesh ref={meshRef} castShadow receiveShadow>
-            <boxGeometry args={[w, h, d]} />
-            <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
-          </mesh>
+  // Update materials directly on the mesh when textures or selection change
+  useEffect(() => {
+    if (!meshRef.current) return
+    
+    const mesh = meshRef.current
+    if (!mesh.material || !Array.isArray(mesh.material)) return
+    
+    const faceToPanelMap: Record<number, PanelId> = {
+      0: "right",
+      1: "left",
+      2: "top",
+      3: "bottom",
+      4: "front",
+      5: "back",
+    }
+    
+    const textureLoader = new THREE.TextureLoader()
+    
+    // Update each material
+    for (let i = 0; i < 6; i++) {
+      const material = mesh.material[i] as THREE.MeshStandardMaterial
+      if (!material) continue
+      
+      const panelId = faceToPanelMap[i]
+      const textureUrl = panelTextures[panelId]
+      
+      // Update base color
+      material.color.set(color)
+      
+      // Update selection highlight
+      if (panelId === selectedPanelId) {
+        material.emissive.set("#fbbf24")
+        material.emissiveIntensity = 0.3
+      } else {
+        material.emissive.set(0, 0, 0)
+        material.emissiveIntensity = 0
+      }
+      
+      // Update texture
+      if (textureUrl) {
+        textureLoader.load(
+          textureUrl,
+          (texture) => {
+            texture.flipY = false
+            material.map = texture
+            material.needsUpdate = true
+          },
+          undefined,
+          (error) => {
+            console.error(`[BoxPackage3D] Failed to load texture for ${panelId}:`, error)
+          }
         )
+      } else {
+        material.map = null
+        material.needsUpdate = true
+      }
+    }
+  }, [panelTextures, selectedPanelId, color])
 
-      case "cylinder":
-        // For cylinder, width represents diameter, so radius is width/2
-        // Use fixed scale so changing height doesn't affect radius
-        const radius = (width * fixedScale) / 2
-        const cylinderHeight = height * fixedScale
-        return (
-          <group ref={meshRef}>
-            {/* Main cylinder body */}
-            <mesh castShadow receiveShadow>
-              <cylinderGeometry args={[radius, radius, cylinderHeight, 32]} />
-              <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
-            </mesh>
-            {/* Top and bottom caps */}
-            <mesh position={[0, cylinderHeight/2 + 0.01, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[radius, radius, 0.02, 32]} />
-              <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
-            </mesh>
-            <mesh position={[0, -cylinderHeight/2 - 0.01, 0]} castShadow receiveShadow>
-              <cylinderGeometry args={[radius, radius, 0.02, 32]} />
-              <meshStandardMaterial color={color} roughness={0.3} metalness={0.1} />
-            </mesh>
-          </group>
-        )
+  const handleClick = (event: any) => {
+    if (!onPanelSelect) return
 
-      case "bag":
-        return (
-          <group ref={meshRef}>
-            {/* Main bag body (slightly tapered) */}
-            <mesh castShadow receiveShadow position={[0, -h / 4, 0]}>
-              <boxGeometry args={[w * 0.9, h * 0.8, d * 0.9]} />
-              <meshStandardMaterial color={color} roughness={0.8} metalness={0.0} />
-            </mesh>
-            {/* Top fold/opening */}
-            <mesh castShadow receiveShadow position={[0, h * 0.3, 0]}>
-              <boxGeometry args={[w * 1.1, h * 0.1, d * 0.9]} />
-              <meshStandardMaterial color={color} roughness={0.8} metalness={0.0} />
-            </mesh>
-            {/* Side gussets */}
-            <mesh castShadow receiveShadow position={[-w * 0.45, -h / 4, 0]}>
-              <boxGeometry args={[0.02, h * 0.8, d * 0.9]} />
-              <meshStandardMaterial color={color} roughness={0.8} metalness={0.0} />
-            </mesh>
-            <mesh castShadow receiveShadow position={[w * 0.45, -h / 4, 0]}>
-              <boxGeometry args={[0.02, h * 0.8, d * 0.9]} />
-              <meshStandardMaterial color={color} roughness={0.8} metalness={0.0} />
-            </mesh>
-          </group>
-        )
+    event.stopPropagation()
+    const intersection = event.intersections?.[0]
+    if (!intersection || intersection.faceIndex === undefined) return
 
-      default:
-        return null
+    // Each face has 2 triangles, so divide by 2 to get face index
+    const faceIndex = Math.floor(intersection.faceIndex / 2)
+
+    // Three.js BoxGeometry face order: [right, left, top, bottom, front, back]
+    const faceToPanelMap: Record<number, PanelId> = {
+      0: "right",
+      1: "left",
+      2: "top",
+      3: "bottom",
+      4: "front",
+      5: "back",
+    }
+    
+    if (faceIndex >= 0 && faceIndex < 6) {
+      const clickedPanel = faceToPanelMap[faceIndex]
+      
+      if (clickedPanel === selectedPanelId) {
+        onPanelSelect(null) // Deselect if clicking same panel
+      } else {
+        onPanelSelect(clickedPanel)
+      }
     }
   }
 
   return (
-    <>
-      {renderPackage()}
-      <gridHelper args={[10, 10, "#e5e7eb", "#f3f4f6"]} />
-    </>
+    <mesh
+      ref={meshRef}
+      castShadow
+      receiveShadow
+      onClick={handleClick}
+      onPointerOver={(e) => {
+        e.stopPropagation()
+        document.body.style.cursor = "pointer"
+      }}
+      onPointerOut={() => {
+        document.body.style.cursor = "default"
+      }}
+    >
+      <boxGeometry args={[w, h, d]} />
+      <primitive object={materials} attach="material" />
+    </mesh>
   )
+}
+
+function CylinderPackage3D({
+  dimensions,
+  selectedPanelId,
+  onPanelSelect,
+  color = "#93c5fd",
+  panelTextures = {},
+}: {
+  dimensions: { width: number; height: number; depth: number }
+  selectedPanelId?: PanelId | null
+  onPanelSelect?: (panelId: PanelId | null) => void
+  color?: string
+  panelTextures?: Record<PanelId, string>
+}) {
+  const groupRef = useRef<THREE.Group>(null)
+  const { width, height } = dimensions
+
+  const fixedScale = 0.01
+  const radius = (width * fixedScale) / 2
+  const cylinderHeight = height * fixedScale
+
+  useFrame((state) => {
+    if (groupRef.current) {
+      groupRef.current.rotation.y = state.clock.getElapsedTime() * 0.2
+    }
+  })
+
+  const baseMaterial = useMemo(() => {
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3,
+      metalness: 0.1,
+    })
+    
+    // Apply body texture if available - load asynchronously
+    const bodyTexture = panelTextures["body"]
+    if (bodyTexture) {
+      const textureLoader = new THREE.TextureLoader()
+      textureLoader.load(
+        bodyTexture,
+        (texture) => {
+          texture.flipY = false
+          material.map = texture
+          material.needsUpdate = true
+        },
+        undefined,
+        (error) => {
+          console.error("[CylinderPackage3D] Failed to load body texture:", error)
+        }
+      )
+    }
+    
+    return material
+  }, [color, panelTextures])
+
+  const selectedMaterial = useMemo(
+    () =>
+      new THREE.MeshStandardMaterial({
+        color: "#fbbf24",
+        roughness: 0.3,
+        metalness: 0.1,
+        emissive: "#fbbf24",
+        emissiveIntensity: 0.3,
+      }),
+    []
+  )
+  
+  const topMaterial = useMemo(() => {
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3,
+      metalness: 0.1,
+    })
+    
+    const topTexture = panelTextures["top"]
+    if (topTexture) {
+      const textureLoader = new THREE.TextureLoader()
+      textureLoader.load(
+        topTexture,
+        (texture) => {
+          texture.flipY = false
+          material.map = texture
+          material.needsUpdate = true
+        },
+        undefined,
+        (error) => {
+          console.error("[CylinderPackage3D] Failed to load top texture:", error)
+        }
+      )
+    }
+    
+    return material
+  }, [color, panelTextures])
+  
+  const bottomMaterial = useMemo(() => {
+    const material = new THREE.MeshStandardMaterial({
+      color: color,
+      roughness: 0.3,
+      metalness: 0.1,
+    })
+    
+    const bottomTexture = panelTextures["bottom"]
+    if (bottomTexture) {
+      const textureLoader = new THREE.TextureLoader()
+      textureLoader.load(
+        bottomTexture,
+        (texture) => {
+          texture.flipY = false
+          material.map = texture
+          material.needsUpdate = true
+        },
+        undefined,
+        (error) => {
+          console.error("[CylinderPackage3D] Failed to load bottom texture:", error)
+        }
+      )
+    }
+    
+    return material
+  }, [color, panelTextures])
+
+  const handleBodyClick = (event: THREE.Event) => {
+    if (!onPanelSelect) return
+    event.stopPropagation()
+    if ("body" === selectedPanelId) {
+      onPanelSelect(null)
+    } else {
+      onPanelSelect("body")
+    }
+  }
+
+  const handleTopClick = (event: THREE.Event) => {
+    if (!onPanelSelect) return
+    event.stopPropagation()
+    if ("top" === selectedPanelId) {
+      onPanelSelect(null)
+    } else {
+      onPanelSelect("top")
+    }
+  }
+
+  const handleBottomClick = (event: THREE.Event) => {
+    if (!onPanelSelect) return
+    event.stopPropagation()
+    if ("bottom" === selectedPanelId) {
+      onPanelSelect(null)
+    } else {
+      onPanelSelect("bottom")
+    }
+  }
+
+  return (
+    <group ref={groupRef}>
+      {/* Main cylinder body */}
+      <mesh
+        castShadow
+        receiveShadow
+        onClick={handleBodyClick}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          document.body.style.cursor = "pointer"
+        }}
+        onPointerOut={() => {
+          document.body.style.cursor = "default"
+        }}
+        material={selectedPanelId === "body" ? selectedMaterial : baseMaterial}
+      >
+        <cylinderGeometry args={[radius, radius, cylinderHeight, 32]} />
+      </mesh>
+      {/* Top cap */}
+      <mesh
+        position={[0, cylinderHeight / 2 + 0.01, 0]}
+        castShadow
+        receiveShadow
+        onClick={handleTopClick}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          document.body.style.cursor = "pointer"
+        }}
+        onPointerOut={() => {
+          document.body.style.cursor = "default"
+        }}
+        material={selectedPanelId === "top" ? selectedMaterial : topMaterial}
+      >
+        <cylinderGeometry args={[radius, radius, 0.02, 32]} />
+      </mesh>
+      {/* Bottom cap */}
+      <mesh
+        position={[0, -cylinderHeight / 2 - 0.01, 0]}
+        castShadow
+        receiveShadow
+        onClick={handleBottomClick}
+        onPointerOver={(e) => {
+          e.stopPropagation()
+          document.body.style.cursor = "pointer"
+        }}
+        onPointerOut={() => {
+          document.body.style.cursor = "default"
+        }}
+        material={selectedPanelId === "bottom" ? selectedMaterial : bottomMaterial}
+      >
+        <cylinderGeometry args={[radius, radius, 0.02, 32]} />
+      </mesh>
+    </group>
+  )
+}
+
+function Package3D({ model, selectedPanelId, onPanelSelect, color, panelTextures }: PackageViewer3DProps) {
+  const { type, dimensions } = model
+
+  switch (type) {
+    case "box":
+      return (
+        <BoxPackage3D
+          dimensions={dimensions}
+          selectedPanelId={selectedPanelId}
+          onPanelSelect={onPanelSelect}
+          color={color}
+          panelTextures={panelTextures}
+        />
+      )
+
+    case "cylinder":
+      return (
+        <CylinderPackage3D
+          dimensions={dimensions}
+          selectedPanelId={selectedPanelId}
+          onPanelSelect={onPanelSelect}
+          color={color}
+          panelTextures={panelTextures}
+        />
+      )
+
+    default:
+      return null
+  }
 }
 
 export function PackageViewer3D(props: PackageViewer3DProps) {
@@ -143,7 +425,7 @@ export function PackageViewer3D(props: PackageViewer3DProps) {
         <Package3D {...props} />
       </Canvas>
 
-      {props.dielines && <MiniDielineHud dielines={props.dielines} />}
+      {props.model.dielines && <MiniDielineHud dielines={props.model.dielines} />}
     </div>
   )
 }
