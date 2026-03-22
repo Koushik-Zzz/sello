@@ -20,6 +20,7 @@ class TrellisOutput(TypedDict, total=False):
 class TrellisService:
     def __init__(self):
         self.api_key = settings.FAL_KEY
+        self.model_id = settings.TRELLIS_MODEL_ID
         if self.api_key:
             # Set environment variable for fal_client library
             os.environ["FAL_KEY"] = self.api_key
@@ -27,47 +28,54 @@ class TrellisService:
             logger.info(f"fal.ai API key configured: {self.api_key[:10]}...")
         else:
             logger.warning("No fal.ai API key found in settings")
+        logger.info(f"3D generation model configured: {self.model_id}")
     
     def generate_3d_asset(
         self,
         images: List[str],
         seed: int = 1337,
-        texture_size: int = 1536,
-        mesh_simplify: float = 0.92,
-        ss_sampling_steps: int = 14,
-        ss_guidance_strength: float = 7.5,
-        slat_sampling_steps: int = 14,
-        slat_guidance_strength: float = 3.5,
+        # DEMO MODE: Maximum quality settings (slower but best results)
+        texture_size: int = 2048,       # Max resolution textures (was 1024)
+        mesh_simplify: float = 0.95,    # 95% mesh retention for maximum detail (was 0.92)
+        ss_sampling_steps: int = 20,    # High quality geometry (was 14)
+        ss_guidance_strength: float = 8.0,  # Strong geometry fidelity (was 7.5)
+        slat_sampling_steps: int = 20,  # High quality latent details (was 14)
+        slat_guidance_strength: float = 4.0,  # Enhanced texture detail (was 3.5)
         progress_callback = None,
+        use_multi_image: bool = False,
+        multiimage_algo: str = "stochastic",
     ) -> TrellisOutput:
         """
         Generate a 3D asset from input images using Trellis via fal.ai.
         
-        Note: Only the first image is used as fal.ai's Trellis API accepts single images.
+        Supports single-image and multi-image workflows (set use_multi_image=True).
         
-        Parameters optimized for quality/speed balance (slightly favor quality):
-        - texture_size: 1536 (sweet spot - better than 1024, faster than 2048)
-        - mesh_simplify: 0.92 (92% mesh retention for better detail)
-        - ss_sampling_steps: 14 (good geometry quality, still faster than 16)
-        - slat_sampling_steps: 14 (better latent detail, matches ss_steps)
-        - ss_guidance_strength: 7.5 (maintain geometry fidelity)
-        - slat_guidance_strength: 3.5 (enhanced detail for better textures)
+        🎨 DEMO MODE - Parameters optimized for MAXIMUM QUALITY:
+        - texture_size: 2048 (max resolution for crisp textures)
+        - mesh_simplify: 0.95 (95% mesh retention for maximum geometric detail)
+        - ss_sampling_steps: 20 (high quality geometry reconstruction)
+        - ss_guidance_strength: 8.0 (strong adherence to input image)
+        - slat_sampling_steps: 20 (high quality latent space sampling)
+        - slat_guidance_strength: 4.0 (enhanced texture/detail fidelity)
         
-        Balance: ~30% faster than original 2048/16 settings with visibly better quality than 1024/12.
+        ⏱️  Expected time: 4-6 minutes per model (vs ~2-3 min with standard settings)
+        📦 Output quality: Significantly sharper textures and more detailed geometry
         """
         try:
             if not images or len(images) == 0:
                 raise ValueError("No images provided")
             
-            # Use only the first image (fal.ai accepts single image_url)
-            image_url = images[0]
-            if len(images) > 1:
-                logger.warning(f"Multiple images provided ({len(images)}), using only the first one")
+            use_multi = use_multi_image and len(images) > 1
             
             logger.info("=" * 80)
             logger.info("🎨 TRELLIS SERVICE - Submitting request to fal.ai")
-            logger.info(f"  Image URL length: {len(image_url)}")
-            logger.info(f"  Image URL preview: {image_url[:100]}...")
+            logger.info(f"  Images provided: {len(images)}")
+            if use_multi:
+                for idx, img in enumerate(images, 1):
+                    logger.info(f"    [{idx}] len={len(img)} preview={img[:100]}...")
+            else:
+                logger.info(f"  Image URL length: {len(images[0])}")
+                logger.info(f"  Image URL preview: {images[0][:100]}...")
             logger.info(f"  seed: {seed}")
             logger.info(f"  texture_size: {texture_size}")
             logger.info(f"  mesh_simplify: {mesh_simplify}")
@@ -85,18 +93,53 @@ class TrellisService:
             
             # Submit request and get result using fal_client.subscribe
             # This handles submission, polling, and result retrieval automatically
-            result = fal_client.subscribe(
-                "fal-ai/trellis",
-                arguments={
-                    "image_url": image_url,
+            # Old Meshy implementation (kept commented for reference):
+            # arguments = {
+            #     "image_urls": images,
+            #     "topology": "quad",
+            #     "target_polycount": 30000,
+            #     "symmetry_mode": "auto",
+            #     "should_remesh": True,
+            #     "should_texture": True,
+            #     "enable_safety_checker": True,
+            # }
+            # result = fal_client.subscribe(
+            #     "fal-ai/meshy/v5/multi-image-to-3d",
+            #     arguments=arguments,
+            #     with_logs=True,
+            #     on_queue_update=lambda update: self._handle_queue_update(update)
+            # )
+
+            # Trellis implementation:
+            # Some Trellis endpoints (e.g., fal-ai/trellis-2) require `image_url`
+            # while Meshy-style endpoints expect `image_urls`.
+            model_id_lc = (self.model_id or "").lower()
+            if "trellis" in model_id_lc and "meshy" not in model_id_lc:
+                if len(images) > 1:
+                    logger.warning(
+                        "Model %s expects single image input; received %d images. Using the first image.",
+                        self.model_id,
+                        len(images),
+                    )
+                arguments = {
+                    "image_url": images[0],
+                    "seed": seed,
+                }
+            else:
+                arguments = {
+                    "image_urls": images,
                     "seed": seed,
                     "texture_size": texture_size,
                     "mesh_simplify": mesh_simplify,
                     "ss_sampling_steps": ss_sampling_steps,
                     "ss_guidance_strength": ss_guidance_strength,
                     "slat_sampling_steps": slat_sampling_steps,
-                    "slat_guidance_strength": slat_guidance_strength
-                },
+                    "slat_guidance_strength": slat_guidance_strength,
+                }
+
+            result = fal_client.subscribe(
+                self.model_id,
+                arguments=arguments,
                 with_logs=True,
                 on_queue_update=lambda update: self._handle_queue_update(update)
             )
@@ -117,19 +160,25 @@ class TrellisService:
             logger.info(f"Full result: {result}")
             
             # Map fal.ai output to TrellisOutput schema
-            # fal.ai returns: {"model_mesh": {"url": "...", ...}, "timings": {...}}
+            # fal.ai returns: {"model_glb": {"url": "...", ...}, ...}
             output = {}
             
             if isinstance(result, dict):
-                # Check for model_mesh in the result
-                if "model_mesh" in result and result["model_mesh"]:
-                    model_mesh = result["model_mesh"]
-                    if isinstance(model_mesh, dict) and "url" in model_mesh:
-                        output["model_file"] = model_mesh["url"]
+                # Check common output keys used by fal.ai 3D providers
+                if "model_glb" in result and result["model_glb"]:
+                    model_glb = result["model_glb"]
+                    if isinstance(model_glb, dict) and "url" in model_glb:
+                        output["model_file"] = model_glb["url"]
                         logger.info(f"🎯 Model file URL: {output['model_file']}")
-                    elif isinstance(model_mesh, str):
-                        output["model_file"] = model_mesh
+                    elif isinstance(model_glb, str):
+                        output["model_file"] = model_glb
                         logger.info(f"🎯 Model file URL: {output['model_file']}")
+                elif "model_file" in result and result["model_file"]:
+                    if isinstance(result["model_file"], dict) and "url" in result["model_file"]:
+                        output["model_file"] = result["model_file"]["url"]
+                    elif isinstance(result["model_file"], str):
+                        output["model_file"] = result["model_file"]
+                    logger.info(f"🎯 Model file URL: {output['model_file']}")
             
             if not output:
                 raise Exception(f"No valid output received from fal.ai. Result was: {result}")

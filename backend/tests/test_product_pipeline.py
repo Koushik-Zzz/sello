@@ -35,7 +35,7 @@ async def test_create_flow_persists_assets(monkeypatch):
         "no_background_images": ["https://cdn.local/nobg.png"],
     }
 
-    async def fake_generate_views(prompt, reference_images=None, image_count=3, thinking_level=None):
+    async def fake_generate_views(prompt, reference_images=None, image_count=3, workflow=None, base_description=None, is_texture=False):
         await asyncio.sleep(0)
         assert reference_images is None
         assert prompt == "New speaker concept"
@@ -80,7 +80,7 @@ async def test_edit_flow_uses_previous_images(monkeypatch):
     updated_images = ["edit-1", "edit-2", "edit-3"]
     trellis_data = TrellisArtifacts(model_file="https://cdn.local/new.glb").model_dump(mode="json")
 
-    async def fake_generate_views(prompt, reference_images=None, image_count=3, thinking_level=None):
+    async def fake_generate_views(prompt, reference_images=None, image_count=3, workflow=None, base_description=None, is_texture=False):
         await asyncio.sleep(0)
         assert prompt == "Add metallic label"
         assert reference_images == ["existing-image"]

@@ -1,7 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timezone
-from typing import List, Literal, Optional
+from typing import Dict, List, Literal, Optional
 
 from pydantic import BaseModel, Field
 
@@ -49,6 +49,7 @@ class ProductState(BaseModel):
     status: str = "idle"
     message: Optional[str] = None
     in_progress: bool = False
+    generation_started_at: Optional[datetime] = None  # For timer continuity across reloads
     image_count: int = 3
     images: List[str] = Field(default_factory=list)
     trellis_output: Optional[TrellisArtifacts] = None
@@ -56,6 +57,9 @@ class ProductState(BaseModel):
     last_error: Optional[str] = None
     created_at: datetime = Field(default_factory=_utcnow)
     updated_at: datetime = Field(default_factory=_utcnow)
+    
+    # Export file tracking
+    export_files: Dict[str, str] = Field(default_factory=dict)  # format -> file_path
 
     def as_json(self) -> dict:
         """Return a JSON-serializable dict."""
@@ -73,6 +77,7 @@ class ProductState(BaseModel):
         self.status = "complete"
         self.message = message
         self.in_progress = False
+        self.generation_started_at = None  # Clear timer on completion
         self.updated_at = _utcnow()
 
     def mark_progress(self, status: str, message: Optional[str] = None) -> None:

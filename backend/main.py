@@ -1,6 +1,5 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from app.endpoints.packaging.router import router as packaging_router
 import logging
 
 # Configure logging
@@ -34,10 +33,6 @@ try:
     logging.info("Product router loaded")
 except ImportError as e:
     logging.warning(f"Product router not available (missing dependencies): {e}")
-
-# Packaging router is required for the chat panel feature
-app.include_router(packaging_router)
-logging.info("Packaging router loaded")
 
 @app.get("/")
 def read_root():

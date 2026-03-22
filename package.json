@@ -1,5 +1,9 @@
 {
   "dependencies": {
+<<<<<<< HEAD
     "motion": "^12.23.24"
+=======
+    "framer-motion": "^12.23.26"
+>>>>>>> 8e9a19eced5954617d49db012dd088e459441221
   }
 }

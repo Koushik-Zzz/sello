@@ -16,8 +16,8 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Vril",
-  description: "Packaging Design Tool",
+  title: "Sello",
+  description: "3D Product Generation Tool",
   icons: {
     icon: "/logo.svg",
     shortcut: "/logo.svg",

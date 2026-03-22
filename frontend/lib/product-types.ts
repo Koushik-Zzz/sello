@@ -25,6 +25,7 @@ export interface ProductState {
   status: string;
   message?: string;
   in_progress: boolean;
+  generation_started_at?: string;
   image_count: number;
   images: string[];
   trellis_output?: TrellisArtifacts;
@@ -32,6 +33,7 @@ export interface ProductState {
   last_error?: string;
   created_at: string;
   updated_at: string;
+  export_files?: Record<string, string>; // format -> file_path
 }
 
 export interface ProductStatus {

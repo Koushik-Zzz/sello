@@ -8,19 +8,9 @@ import { Boxes, Box, Package, Image as ImageIcon, Download } from "lucide-react"
 const NAV_ITEMS = [
   {
     path: "/product",
-    label: "Product",
+    label: "3D Product",
     icon: Box,
-  },
-  {
-    path: "/packaging",
-    label: "Packaging",
-    icon: Package,
-  },
-  {
-    path: "/final-view",
-    label: "Final View",
-    icon: ImageIcon,
-  },
+  }
 ];
 
 export function Navbar() {
