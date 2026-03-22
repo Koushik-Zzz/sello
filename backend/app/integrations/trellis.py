@@ -1,4 +1,4 @@
-import fal_client
+import fal_client  # type: ignore
 import logging
 import os
 import time
@@ -33,6 +33,7 @@ class TrellisService:
     def generate_3d_asset(
         self,
         images: List[str],
+        model_id: Optional[str] = None,
         seed: int = 1337,
         # DEMO MODE: Maximum quality settings (slower but best results)
         texture_size: int = 2048,       # Max resolution textures (was 1024)
@@ -113,17 +114,29 @@ class TrellisService:
             # Trellis implementation:
             # Some Trellis endpoints (e.g., fal-ai/trellis-2) require `image_url`
             # while Meshy-style endpoints expect `image_urls`.
-            model_id_lc = (self.model_id or "").lower()
+            active_model_id = model_id or self.model_id
+            
+            logger.info(f"Using 3D max model: {active_model_id}")
+            
+            model_id_lc = (active_model_id or "").lower()
             if "trellis" in model_id_lc and "meshy" not in model_id_lc:
                 if len(images) > 1:
                     logger.warning(
                         "Model %s expects single image input; received %d images. Using the first image.",
-                        self.model_id,
+                        active_model_id,
                         len(images),
                     )
                 arguments = {
                     "image_url": images[0],
                     "seed": seed,
+                }
+            elif "meshy" in model_id_lc:
+                arguments = {
+                    "image_urls": images,
+                    "enable_pbr": True,
+                    "should_remesh": True,
+                    "should_texture": True,
+                    "enable_safety_checker": True,
                 }
             else:
                 arguments = {
@@ -138,7 +151,7 @@ class TrellisService:
                 }
 
             result = fal_client.subscribe(
-                self.model_id,
+                active_model_id,
                 arguments=arguments,
                 with_logs=True,
                 on_queue_update=lambda update: self._handle_queue_update(update)
@@ -161,7 +174,7 @@ class TrellisService:
             
             # Map fal.ai output to TrellisOutput schema
             # fal.ai returns: {"model_glb": {"url": "...", ...}, ...}
-            output = {}
+            output: TrellisOutput = {}
             
             if isinstance(result, dict):
                 # Check common output keys used by fal.ai 3D providers

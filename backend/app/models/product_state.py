@@ -45,6 +45,7 @@ class ProductState(BaseModel):
 
     prompt: Optional[str] = None
     latest_instruction: Optional[str] = None
+    trellis_model_id: Optional[str] = None
     mode: Literal["idle", "create", "edit"] = "idle"
     status: str = "idle"
     message: Optional[str] = None

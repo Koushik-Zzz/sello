@@ -1,6 +1,6 @@
 import asyncio
 import logging
-from typing import Set, Literal
+from typing import Set, Literal, Optional
 from pathlib import Path
 
 from fastapi import APIRouter, HTTPException
@@ -36,10 +36,12 @@ _background_tasks: Set[asyncio.Task] = set()
 class ProductCreateRequest(BaseModel):
     prompt: str = Field(..., min_length=5, max_length=2000)
     image_count: int = Field(1, ge=1, le=6)
+    trellis_model_id: Optional[str] = None
 
 
 class ProductEditRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=2000)
+    trellis_model_id: Optional[str] = None
 
 
 def _has_active_tasks() -> bool:
@@ -98,6 +100,7 @@ async def start_create(request: ProductCreateRequest):
     
     state.prompt = request.prompt
     state.latest_instruction = request.prompt
+    state.trellis_model_id = request.trellis_model_id
     state.mode = "create"
     state.status = "pending"
     state.message = "Preparing product generation"
@@ -137,6 +140,8 @@ async def start_edit(request: ProductEditRequest):
 
     logger.info(f"[product-router] Queuing edit request {'(DEMO MOCK MODE)' if is_mock else ''}")
     state.latest_instruction = request.prompt
+    if request.trellis_model_id:
+        state.trellis_model_id = request.trellis_model_id
     state.mode = "edit"
     state.status = "pending"
     state.message = "Preparing edit request"
@@ -161,6 +166,7 @@ class TrellisOnlyRequest(BaseModel):
     prompt: str = Field(..., min_length=3, max_length=2000, description="Product description")
     images: list[str] = Field(..., min_length=1, max_length=6, description="Pre-generated image URLs or base64 data URLs")
     mode: Literal["create", "edit"] = Field("create", description="'create' for new product, 'edit' for modification")
+    trellis_model_id: Optional[str] = None
 
 
 @router.post("/trellis-only")
@@ -198,6 +204,9 @@ async def start_trellis_only(request: TrellisOnlyRequest):
     else:
         state.latest_instruction = request.prompt
     
+    if request.trellis_model_id:
+        state.trellis_model_id = request.trellis_model_id
+        
     state.mode = request.mode
     state.status = "pending"
     state.message = "Preparing 3D generation from pre-generated images"

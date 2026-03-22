@@ -38,6 +38,7 @@ export default function Home() {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [currentProductIndex, setCurrentProductIndex] = useState(0);
   const [isAnimating, setIsAnimating] = useState(false);
+  const [selectedModel, setSelectedModel] = useState("fal-ai/trellis-2");
 
   const productIdeas = ["Lego", "ball", "hat", "mug", "chair", "pillow", "labubu"];
 
@@ -125,7 +126,7 @@ export default function Home() {
 
     try {
       // Start 3D process with 4 images combined
-      await startTrellisOnly(prompt.trim() || "product", draftImages, "create");
+      await startTrellisOnly(prompt.trim() || "product", draftImages, "create", selectedModel);
       await pollUntilComplete();
       router.push("/product");
     } catch (error) {
@@ -261,8 +262,15 @@ export default function Home() {
             </div>
             
             <div className="flex items-center justify-between p-3 border-t-2 border-black bg-muted/30 cursor-default">
-              <div className="flex gap-2">
-                {!draftImage && !draftImages && (
+              <div className="flex gap-2">                  <select 
+                    value={selectedModel}
+                    onChange={(e) => setSelectedModel(e.target.value)}
+                    className="h-9 px-2 text-sm bg-white border-2 border-black rounded-lg cursor-pointer outline-none focus:ring-2 focus:ring-black focus:border-transparent"
+                    onClick={(e) => e.stopPropagation()}
+                  >
+                    <option value="fal-ai/trellis-2">Trellis</option>
+                    <option value="fal-ai/meshy/v5/multi-image-to-3d">Meshy</option>
+                  </select>                {!draftImage && !draftImages && (
                  <>
                   <input type="file" ref={fileInputRef} onChange={handleFileSelect} className="hidden" accept="image/*" />
                   <Button variant="outline" size="icon" className="h-9 w-9 rounded-lg border-black hover:bg-secondary transition-colors duration-200 cursor-pointer" title="Upload reference image" onClick={(e) => { e.stopPropagation(); fileInputRef.current?.click(); }}>

@@ -28,21 +28,21 @@ async function handleResponse<T>(response: Response): Promise<T> {
   return response.json() as Promise<T>;
 }
 
-export async function createProduct(prompt: string, imageCount: number = 1): Promise<ProductStatus> {
+export async function createProduct(prompt: string, imageCount: number = 1, trellisModelId?: string): Promise<ProductStatus> {
   const response = await fetch(`${API_BASE}/product/create`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, image_count: imageCount }),
+    body: JSON.stringify({ prompt, image_count: imageCount, trellis_model_id: trellisModelId }),
   });
 
   return handleResponse(response);
 }
 
-export async function editProduct(prompt: string): Promise<ProductStatus> {
+export async function editProduct(prompt: string, trellisModelId?: string): Promise<ProductStatus> {
   const response = await fetch(`${API_BASE}/product/edit`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt }),
+    body: JSON.stringify({ prompt, trellis_model_id: trellisModelId }),
   });
 
   return handleResponse(response);
@@ -125,11 +125,11 @@ export async function generateDraftMultiview(prompt: string, imageUrl: string): 
   return handleResponse(response);
 }
 
-export async function startTrellisOnly(prompt: string, images: string[], mode: "create" | "edit" = "create"): Promise<ProductStatus> {
+export async function startTrellisOnly(prompt: string, images: string[], mode: "create" | "edit" = "create", trellisModelId?: string): Promise<ProductStatus> {
   const response = await fetch(`${API_BASE}/product/trellis-only`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({ prompt, images, mode }),
+    body: JSON.stringify({ prompt, images, mode, trellis_model_id: trellisModelId }),
   });
   return handleResponse(response);
 }

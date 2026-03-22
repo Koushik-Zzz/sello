@@ -109,7 +109,7 @@ class ProductPipelineService:
                 self._save_gemini_images(images, f"{mode}_pregenerated")
             
             # Run Trellis
-            trellis_output = await self._generate_trellis_model(images)
+            trellis_output = await self._generate_trellis_model(images, model_id=state.trellis_model_id)
             artifacts = TrellisArtifacts.model_validate(trellis_output)
             
             duration_seconds = round(time.perf_counter() - flow_started_at, 2)
@@ -201,7 +201,7 @@ class ProductPipelineService:
                 )
             )
 
-            trellis_output = await self._generate_trellis_model(images)
+            trellis_output = await self._generate_trellis_model(images, model_id=state.trellis_model_id)
             artifacts = TrellisArtifacts.model_validate(trellis_output)
             duration_seconds = round(time.perf_counter() - flow_started_at, 2)
             iteration_id = f"iter_{int(time.time() * 1000)}"
@@ -252,6 +252,7 @@ class ProductPipelineService:
         images: List[str],
         multi_image: Optional[bool] = None,
         multi_image_algo: Optional[str] = None,
+        model_id: Optional[str] = None,
     ) -> Dict[str, Any]:
         """Call Trellis via the existing integration in a background thread."""
         if not TRELLIS_AVAILABLE or not trellis_service:
@@ -277,6 +278,7 @@ class ProductPipelineService:
         return await asyncio.to_thread(
             trellis_service.generate_3d_asset,
             images=images,
+            model_id=model_id,
             progress_callback=progress_callback,
             use_multi_image=use_multi,
             multiimage_algo=algo,
