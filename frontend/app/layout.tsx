@@ -16,7 +16,7 @@ const geistMono = Geist_Mono({
 });
 
 export const metadata: Metadata = {
-  title: "Sello",
+  title: "PolyCraft",
   description: "3D Product Generation Tool",
   icons: {
     icon: "/logo.svg",

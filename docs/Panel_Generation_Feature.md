@@ -143,7 +143,7 @@ You are a packaging panel layout model with a reference mockup.
 ## File Structure
 
 ```
-SELLO/
+PolyCraft/
 ├── backend/
 │   ├── app/
 │   │   ├── services/

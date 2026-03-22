@@ -10,7 +10,7 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { ZoomIn, ZoomOut, Play, Pause, Settings, Sun, Warehouse, Eye, EyeOff, Download, X, Layers } from "lucide-react";
-import { remeshProduct } from "@/lib/product-api";
+import { downloadProductExport, remeshProduct } from "@/lib/product-api";
 import ModelViewer, { ModelViewerRef } from "@/components/ModelViewer";
 import { AIChatPanel } from "@/components/AIChatPanel";
 import { useLoading } from "@/providers/LoadingProvider";
@@ -20,6 +20,7 @@ import { getCachedModelUrl } from "@/lib/model-cache";
 
 const REMESH_POLL_INTERVAL_MS = 2000;
 const REMESH_MAX_WAIT_MS = 10 * 60 * 1000;
+const TOOLBAR_BUTTON_CLASS = "transition-all hover:-translate-y-px hover:shadow-[3px_3px_0_rgba(0,0,0,1)]";
 
 function ProductPage() {
   const { stopLoading } = useLoading();
@@ -32,6 +33,7 @@ function ProductPage() {
   const [autoRotate, setAutoRotate] = useState(true);
   const [isEditInProgress, setIsEditInProgress] = useState(false);
   const [isDownloading, setIsDownloading] = useState(false);
+  const [isDownloadingModel, setIsDownloadingModel] = useState(false);
   const [isGalleryOpen, setIsGalleryOpen] = useState(false);
   const [isRemeshOpen, setIsRemeshOpen] = useState(false);
   const [remeshConfig, setRemeshConfig] = useState({ target_polycount: 30000, topology: "triangle", resize_height: 0, origin_at: "" });
@@ -233,6 +235,48 @@ function ProductPage() {
     }
   }, [autoRotate, currentModelUrl, isDownloading]);
 
+  const triggerBlobDownload = useCallback((blob: Blob, filename: string) => {
+    const blobUrl = URL.createObjectURL(blob);
+    const link = document.createElement("a");
+    link.href = blobUrl;
+    link.download = filename;
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    URL.revokeObjectURL(blobUrl);
+  }, []);
+
+  const handleDownloadModelFile = useCallback(async (format: "glb" | "stl" | "obj") => {
+    if (isDownloadingModel) return;
+
+    try {
+      setIsDownloadingModel(true);
+
+      if (format === "glb") {
+        if (!currentModelUrl) {
+          throw new Error("No model available to download");
+        }
+        const response = await fetch(currentModelUrl);
+        if (!response.ok) {
+          throw new Error(`Failed to fetch GLB: ${response.status}`);
+        }
+        const glbBlob = await response.blob();
+        triggerBlobDownload(glbBlob, `product-${Date.now()}.glb`);
+        return;
+      }
+
+      const backendFormat = format === "obj" ? "blend" : "stl";
+      const fileBlob = await downloadProductExport(backendFormat);
+      const extension = format === "obj" ? "obj" : "stl";
+      triggerBlobDownload(fileBlob, `product-${Date.now()}.${extension}`);
+    } catch (error) {
+      console.error("Failed to download model file:", error);
+      alert("Failed to download model file. Please try again.");
+    } finally {
+      setIsDownloadingModel(false);
+    }
+  }, [currentModelUrl, isDownloadingModel, triggerBlobDownload]);
+
   return (
     <>
       <div className="h-screen bg-background flex flex-col overflow-hidden">
@@ -268,34 +312,53 @@ function ProductPage() {
           )}
 
           <div className="absolute top-4 right-4 flex flex-col gap-2">
-            <Button 
-              size="icon" 
-              variant="secondary" 
-              onClick={handleDownloadScreenshot}
-              disabled={isDownloading || !currentModelUrl}
-              title="Download Screenshot"
-            >
-              {isDownloading ? (
-                <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
-              ) : (
-                <Download className="w-4 h-4" />
-              )}
-            </Button>
-            <Button size="icon" variant="secondary" onClick={() => setZoomAction("in")}>
+            <DropdownMenu>
+              <DropdownMenuTrigger asChild>
+                <Button
+                  size="icon"
+                  variant="secondary"
+                  disabled={isDownloadingModel || isDownloading || !currentModelUrl}
+                  title="Download 3D Files"
+                  className={TOOLBAR_BUTTON_CLASS}
+                >
+                  {isDownloadingModel || isDownloading ? (
+                    <div className="w-4 h-4 border-2 border-current border-t-transparent rounded-full animate-spin"></div>
+                  ) : (
+                    <Download className="w-4 h-4" />
+                  )}
+                </Button>
+              </DropdownMenuTrigger>
+              <DropdownMenuContent align="end">
+                <DropdownMenuItem onClick={() => void handleDownloadScreenshot()}>
+                  Download Screenshot
+                </DropdownMenuItem>
+                <DropdownMenuSeparator />
+                <DropdownMenuItem onClick={() => void handleDownloadModelFile("glb")}>
+                  Download GLB
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void handleDownloadModelFile("stl")}>
+                  Download STL
+                </DropdownMenuItem>
+                <DropdownMenuItem onClick={() => void handleDownloadModelFile("obj")}>
+                  Download OBJ
+                </DropdownMenuItem>
+              </DropdownMenuContent>
+            </DropdownMenu>
+            <Button size="icon" variant="secondary" onClick={() => setZoomAction("in")} className={TOOLBAR_BUTTON_CLASS}>
               <ZoomIn className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="secondary" onClick={() => setZoomAction("out")}>
+            <Button size="icon" variant="secondary" onClick={() => setZoomAction("out")} className={TOOLBAR_BUTTON_CLASS}>
               <ZoomOut className="w-4 h-4" />
             </Button>
-            <Button size="icon" variant="secondary" onClick={() => setAutoRotate(!autoRotate)}>
+            <Button size="icon" variant="secondary" onClick={() => setAutoRotate(!autoRotate)} className={TOOLBAR_BUTTON_CLASS}>
               {autoRotate ? <Pause className="w-4 h-4" /> : <Play className="w-4 h-4" />}
             </Button>
-            <Button size="icon" variant="secondary" onClick={() => setIsRemeshOpen(true)} title="Remesh Model">
+            <Button size="icon" variant="secondary" onClick={() => setIsRemeshOpen(true)} title="Remesh Model" className={TOOLBAR_BUTTON_CLASS}>
               <Layers className="w-4 h-4" />
             </Button>
             <DropdownMenu>
               <DropdownMenuTrigger asChild>
-                <Button size="icon" variant="secondary">
+                <Button size="icon" variant="secondary" className={TOOLBAR_BUTTON_CLASS}>
                   <Settings className="w-4 h-4" />
                 </Button>
               </DropdownMenuTrigger>
