@@ -339,7 +339,7 @@ async def trigger_product_export():
 @router.get("/export/{format}")
 async def download_product_export(format: str):
     """Download exported product file."""
-    if format not in ["blend", "stl", "jpg"]:
+    if format not in ["obj", "blend", "stl", "jpg"]:
         raise HTTPException(status_code=400, detail=f"Invalid format: {format}")
     
     state = get_product_state()
@@ -366,6 +366,7 @@ async def download_product_export(format: str):
         raise HTTPException(status_code=404, detail=f"Export file not found: {format}")
     
     media_type_map = {
+        "obj": "application/octet-stream",
         "blend": "application/octet-stream",  # OBJ file
         "stl": "application/octet-stream",
         "jpg": "image/jpeg",

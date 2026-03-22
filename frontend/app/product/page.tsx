@@ -265,10 +265,8 @@ function ProductPage() {
         return;
       }
 
-      const backendFormat = format === "obj" ? "blend" : "stl";
-      const fileBlob = await downloadProductExport(backendFormat);
-      const extension = format === "obj" ? "obj" : "stl";
-      triggerBlobDownload(fileBlob, `product-${Date.now()}.${extension}`);
+      const fileBlob = await downloadProductExport(format);
+      triggerBlobDownload(fileBlob, `product-${Date.now()}.${format}`);
     } catch (error) {
       console.error("Failed to download model file:", error);
       alert("Failed to download model file. Please try again.");

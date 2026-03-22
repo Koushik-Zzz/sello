@@ -81,7 +81,7 @@ export async function exportProductFormats(): Promise<{ status: string; files: R
   return handleResponse(response);
 }
 
-export async function downloadProductExport(format: "blend" | "stl" | "jpg"): Promise<Blob> {
+export async function downloadProductExport(format: "obj" | "blend" | "stl" | "jpg"): Promise<Blob> {
   const response = await fetch(`${API_BASE}/product/export/${format}`);
   if (!response.ok) {
     const detail = await response.text();

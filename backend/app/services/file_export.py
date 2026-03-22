@@ -57,16 +57,17 @@ def export_product_files(state: ProductState) -> Dict[str, str]:
     Returns:
         Dict mapping file format (e.g. 'stl') to absolute file path
     """
-    if not state.model_url:
+    if not state.trellis_output or not state.trellis_output.model_file:
         logger.warning("[file-export] No model URL in state, skipping product export")
         return {}
 
-    logger.info(f"[file-export] Generating product exports for {state.model_url[:80]}")
+    model_url = state.trellis_output.model_file
+    logger.info(f"[file-export] Generating product exports for {model_url[:80]}")
     exports = {}
 
     try:
         # Download and load GLB inside a try block
-        glb_data = _download_glb(state.model_url)
+        glb_data = _download_glb(model_url)
 
         # Save raw GLB as well
         glb_path = EXPORT_DIR / "product.glb"
